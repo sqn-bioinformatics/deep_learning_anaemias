@@ -94,8 +94,11 @@ def make_graph_areas(area_list, path_out_logs, timestamp):
 
 
 def main():
-    path_out_logs = os.path.join(os.path.dirname(__file__), "logs")
 
+    PATH_TO_FILES = "/home/t.afanasyeva/deep_learning_anaemias/resources/cytpix/24-Ramos-4122"
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    path_out_logs = os.path.join(parent_dir, "logs")
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     logging.basicConfig(
         filename=os.path.join(path_out_logs, f"{timestamp}_temp_converter.log"),
@@ -103,10 +106,10 @@ def main():
         )
     logger.info("Started")
 
-    dict_hash_old_name = {}  # Initialise old file names dict
+    dict_hash_old_name = {}  # Keep track of old file names
     area_list = []  # Keep track of cell sizes fot filtering
-    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    path_to_dfs = "/home/t.afanasyeva/deep_learning_anaemias/resources/cytpix/tif/24-Ramos-44"
+
+    path_to_dfs = PATH_TO_FILES
     paths = [path[0] for path in os.walk(path_to_dfs)]
 
     for path_in in paths:
@@ -145,7 +148,7 @@ def main():
                     if h[3] == -1:
                         area = cv2.contourArea(contour)
                         area_list.append(area)
-                        if 150 <= area <= 900:
+                        if 200 <= area <= 900:
                             valid_contours.append(contour)
             except TypeError as e:
                 logger.info(f"TypeError occurred: {e}")
@@ -200,8 +203,10 @@ if __name__ == "__main__":
 
     prof = cProfile.Profile()
     prof.enable()
+
     main()
     prof.disable()
+
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     prof.dump_stats(os.path.join(path_out_logs, "output.prof"))
     with open(os.path.join(path_out_logs, f"{timestamp}performance.log"), "w") as stream:
