@@ -1,6 +1,12 @@
 # Resources
 /resources/
 
+# Output
+/output/
+
+# Models
+/model_zoo/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
