@@ -5,10 +5,13 @@ import numpy as np
 import pickle
 import matplotlib.pyplot as plt
 import logging
+import argparse
 from datetime import datetime
 from tqdm import tqdm
-
 from importlib import reload
+import pathlib
+
+
 reload(logging)
 logger = logging.getLogger(__name__)
 
@@ -29,8 +32,9 @@ def image_rotate_crop(src, cnt, size):
     if len(src.shape) != 2:
         raise ValueError(
             "image_rotate_crop(): Source image should be in grayscale,",
-            "and have two dimensions.")
-    image_width, image_height = src.shape  # cv2 takes rows and cols swapped 
+            "and have two dimensions.",
+        )
+    image_width, image_height = src.shape  # cv2 takes rows and cols swapped
     M = cv2.moments(cnt)
 
     cx = int(M["m10"] / M["m00"])  # Calculate x,y coordinate of center
@@ -41,7 +45,7 @@ def image_rotate_crop(src, cnt, size):
     M = cv2.getRotationMatrix2D((cx, cy), angle, 1)
     img_rot = cv2.warpAffine(
         src, M, (image_width, image_height), flags=cv2.INTER_LINEAR
-        )
+    )
 
     # Calculate the top-left and bottom-right coordinates
     half_size = size // 2
@@ -61,10 +65,10 @@ def check_border_pixels(src):
     border_coordinates = []
 
     top_row = [(0, col) for col in range(cols)]
-    bottom_row = [(rows-1, col) for col in range(cols)]
+    bottom_row = [(rows - 1, col) for col in range(cols)]
     # Left and right columns exclude corners
-    left_col = [(row, 0) for row in range(1, rows-1)]
-    right_col = [(row, cols-1) for row in range(1, rows-1)]
+    left_col = [(row, 0) for row in range(1, rows - 1)]
+    right_col = [(row, cols - 1) for row in range(1, rows - 1)]
 
     border_coordinates.extend(top_row)
     border_coordinates.extend(bottom_row)
@@ -94,61 +98,86 @@ def make_graph_areas(area_list, path_out_logs, timestamp):
 
 
 def main():
-    path_out_logs = os.path.join(os.path.dirname(__file__), "logs")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-f",
+        "--files",
+        help="path to images to convert to png",
+        type=pathlib.Path,
+        required=True,
+    )
+    args = parser.parse_args()
+    PATH_TO_FILES = args.files
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+    path_out_logs = os.path.join(parent_dir, "logs")
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     logging.basicConfig(
         filename=os.path.join(path_out_logs, f"{timestamp}_temp_converter.log"),
-        level=logging.INFO
-        )
+        level=logging.INFO,
+    )
     logger.info("Started")
 
-    dict_hash_old_name = {}  # Initialise old file names dict
+    dict_hash_old_name = {}  # Keep track of old file names
     area_list = []  # Keep track of cell sizes fot filtering
-    
-    with open("/home/t.afanasyeva/deep_learning_anaemias/resources/filename_to_hash_dicts/20240527113959_23-714262.pkl", 'rb') as handle:
-        already_obtained_images_dict = pickle.load(handle)
-    already_obtained_images = already_obtained_images_dict.values()
 
-    file_path = os.path.dirname(__file__)
-    path_to_dfs = "/home/t.afanasyeva/deep_learning_anaemias/resources/cytpix/23-714262"
-    paths = [path[0] for path in os.walk(path_to_dfs)]
+    paths = [path[0] for path in os.walk(PATH_TO_FILES)]
 
     for path_in in paths:
         path_out_folder_name = path_in.split("/")[-1]
-        path_out = os.path.join(file_path, "resources/out/cytpix/", str(path_out_folder_name))
+        path_out = os.path.join(
+            parent_dir, "resources/out/cytpix/", str(path_out_folder_name)
+        )
         if not os.path.exists(path_out):
             os.makedirs(path_out)
-
         images = os.listdir(path_in)
 
-        already_obtained_image_names = [image[0].split("/")[-1] for image in already_obtained_images]
-
         for img_name in tqdm(images):
-            if img_name in already_obtained_image_names:
-                continue
-
             img_path = os.path.join(path_in, img_name)
-            img = cv2.imread(img_path)
+            img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
 
             if img is None:
                 logger.info(f"Warning: {img_path} could not be read, skipping.")
                 continue
 
-            ext_border = cv2.copyMakeBorder(
-                img,
-                top=64,
-                bottom=64,
-                left=64,
-                right=64,
-                borderType=cv2.BORDER_REPLICATE,
+            # Check if image values need to be truncated
+            if np.max(img) == 255:
+                pad = cv2.copyMakeBorder(
+                    img,
+                    top=64,
+                    bottom=64,
+                    left=64,
+                    right=64,
+                    borderType=cv2.BORDER_REPLICATE,
+                )
+                gray_w_padding = cv2.cvtColor(pad, cv2.COLOR_BGR2GRAY)
+
+            else:
+                gray = cv2.normalize(
+                    img,
+                    None,
+                    alpha=0,
+                    beta=255,
+                    norm_type=cv2.NORM_MINMAX,
+                    dtype=cv2.CV_8U,
+                )
+                gray_w_padding = cv2.copyMakeBorder(
+                    gray,
+                    top=64,
+                    bottom=64,
+                    left=64,
+                    right=64,
+                    borderType=cv2.BORDER_REPLICATE,
+                )
+
+            blur = cv2.GaussianBlur(gray_w_padding, (5, 5), 3)
+            _, thresh = cv2.threshold(
+                blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
             )
-            gray = cv2.cvtColor(ext_border, cv2.COLOR_BGR2GRAY)
-            blur = cv2.GaussianBlur(gray, (5, 5), 3)
-            _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
             contours, hierarchy = cv2.findContours(
                 thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE
             )
+
             valid_contours = []
             try:
                 for contour, h in zip(contours, hierarchy[0]):
@@ -156,18 +185,25 @@ def main():
                     if h[3] == -1:
                         area = cv2.contourArea(contour)
                         area_list.append(area)
-                        if 150 <= area <= 900:
+                        if (
+                            200 <= area <= 900
+                        ):  # Empirically determined numbers from running make_graph_areas()
                             valid_contours.append(contour)
             except TypeError as e:
                 logger.info(f"TypeError occurred: {e}")
                 continue
 
             if len(valid_contours) != 1:
-                logger.info(f"Image {img_name} does not have exactly one cell, skipping.")
+                logger.info(
+                    f"Image {img_name} does not have exactly one cell, skipping."
+                )
                 continue
 
             new_image_size = 64
-            rotated_cropped = image_rotate_crop(gray, valid_contours[0], new_image_size)
+            ext_border = cv2.cvtColor(ext_border, cv2.COLOR_BGR2GRAY)
+            rotated_cropped = image_rotate_crop(
+                ext_border, valid_contours[0], new_image_size
+            )
 
             if rotated_cropped.shape != (new_image_size, new_image_size):
                 logger.info(f"Image {img_name} contains cell too close to the boarder.")
@@ -189,34 +225,37 @@ def main():
     make_graph_areas(area_list, path_out_logs, timestamp)
 
     logger.info(
-    f"Successfully processed {len(dict_hash_old_name.keys())/len(images):.2f} percent of all images."
-        )
-    logger.info(
-    f"Final number of images is {len(dict_hash_old_name.keys())})."
-        )
+        f"Successfully processed {(len(dict_hash_old_name.keys())/len(images)*100):.2f} percent of all images."
+    )
+    logger.info(f"Final number of images is {len(dict_hash_old_name.keys())}).")
 
-    with open(os.path.join(path_out_logs, f"{timestamp}dict_hash_old_name.pkl"), "wb") as handle:
+    with open(
+        os.path.join(path_out_logs, f"{timestamp}dict_hash_old_name.pkl"), "wb"
+    ) as handle:
         pickle.dump(dict_hash_old_name, handle)
 
 
 if __name__ == "__main__":
-    path_out_logs = os.path.join(os.path.dirname(__file__), "logs")
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    path_out_logs = os.path.join(parent_dir, "logs")
 
     if not os.path.exists(path_out_logs):
         os.makedirs(path_out_logs)
-
-    # main()
 
     import cProfile
     import pstats
 
     prof = cProfile.Profile()
     prof.enable()
+
     main()
     prof.disable()
+
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     prof.dump_stats(os.path.join(path_out_logs, "output.prof"))
-    with open(os.path.join(path_out_logs, f"{timestamp}performance.log"), "w") as stream:
+    with open(
+        os.path.join(path_out_logs, f"{timestamp}performance.log"), "w"
+    ) as stream:
         stats = pstats.Stats(os.path.join(path_out_logs, "output.prof"), stream=stream)
         stats.sort_stats("cumtime")
         stats.print_stats()
