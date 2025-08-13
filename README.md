@@ -1,2 +1,5 @@
-# deep_learning_anaemias
-Detection of sickle cell and other anaemias using imaging data.
+# Data-driven approach to sickle cell anaemia: prediction of disease outcomes leveraging abnormal red blood cell morphologies
+
+Sickle cell anaemia (SCD) is a severe inherited blood disorder affecting millions worldwide. Standard management includes transfusion of donor blood to dilute sickle cells in circulation and reduce the occurrence of vaso‑occlusive events (VOEs). Despite this, patients can still experience a sudden onset of up to 18 VOEs annually.
+
+In SCD, S‑haemoglobin polymerization drives the sickling of red blood cells (RBCs), and the severity of these morphological abnormalities can serve as a predictor of VOE risk. We collected and labelled images of RBCs, trained an EfficientNetB0 classifier.  Under hypoxic conditions, we detected the expected aberrant sickling morphologies as well as previously under‑described intermediate forms, whose role in disease severity remains unclear. Under normoxic conditions, sickled cells were rare, but we observed pronounced variability in RBC size and membrane quality, likely reflecting donor cell contributions from transfusions. 
